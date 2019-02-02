@@ -2,8 +2,26 @@
 #include <GLFW/glfw3.h> // GLFW helper library
 #include <stdio.h>
 
+static GLuint
+compileShader(const char* vertexShaderSource, const char* fragmentShaderSource) {
+    GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
+    glCompileShader(vertexShader);
+
+    GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
+    glCompileShader(fragmentShader);
+
+    GLuint shader = glCreateProgram();
+    glAttachShader(shader, fragmentShader);
+    glAttachShader(shader, vertexShader);
+    glLinkProgram(shader);
+    return shader;
+}
+
 #define WINDOW_WIDTH 640
 #define WINDOW_HEIGHT 480
+
 int main() {
     if (!glfwInit()) {
         fprintf(stderr, "ERROR: could not start GLFW3\n");
@@ -23,7 +41,6 @@ int main() {
     }
     glfwMakeContextCurrent(window);
 
-    // start GLEW extension handler
     glewExperimental = GL_TRUE;
     glewInit();
 
@@ -54,38 +71,39 @@ int main() {
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
 
-    const char* vertex_shader =
+    const char* vertexShader =
         "#version 400\n"
         "in vec3 vp;"
         "void main() {"
         "  gl_Position = vec4(vp, 1.0);"
         "}";
-    const char* fragment_shader =
+    const char* fragmentShader =
         "#version 400\n"
         "out vec4 frag_colour;"
         "void main() {"
         "  frag_colour = vec4(0.5, 0.0, 0.5, 1.0);"
         "}";
 
-    GLuint vs = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vs, 1, &vertex_shader, NULL);
-    glCompileShader(vs);
-    GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fs, 1, &fragment_shader, NULL);
-    glCompileShader(fs);
+    GLuint shaderProgram = compileShader(vertexShader, fragmentShader);
 
-    GLuint shader_programme = glCreateProgram();
-    glAttachShader(shader_programme, fs);
-    glAttachShader(shader_programme, vs);
-    glLinkProgram(shader_programme);
+    bool running = true;
+    while(running) {
+        if(glfwWindowShouldClose(window)) {
+            running = false;
+        }
+        bool escapePressed = glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS;
+        if (escapePressed) {
+            running = false;
+        }
 
-    while(!glfwWindowShouldClose(window)) {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glUseProgram(shader_programme);
+
+        glUseProgram(shaderProgram);
         glBindVertexArray(vao);
         glDrawArrays(GL_TRIANGLES, 0, 3);
-        glfwPollEvents();
+
         glfwSwapBuffers(window);
+        glfwPollEvents();
     }
 
     glfwTerminate();
