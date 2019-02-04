@@ -11,10 +11,13 @@ set GLFW_INC=%LIBS_FOLDER%\glfw3\include
 set GLFW_LIB=%LIBS_FOLDER%\glfw3\lib\x64
 set GLFW_BIN=%GLFW_LIB%
 
+set ASSIMP_INC=%LIBS_FOLDER%\Assimp\include
+set ASSIMP_LIB=%LIBS_FOLDER%\Assimp\lib\x64
+
 set GLM_INC=%LIBS_FOLDER%\glm
 
-set CommonCompilerFlags=-Zi -Od -EHsc -nologo -FC -I%GLEW_INC% -I%GLFW_INC% -I%GLM_INC% -std:c++14
-set CommonLinkerFlags=-debug -libpath:%GLEW_LIB% -libpath:%GLFW_LIB% glew32.lib glfw3dll.lib opengl32.lib
+set CommonCompilerFlags=-Zi -Od -EHsc -nologo -FC -I%GLEW_INC% -I%GLFW_INC% -I%GLM_INC% -I%ASSIMP_INC% -std:c++14
+set CommonLinkerFlags=-debug -libpath:%GLEW_LIB% -libpath:%GLFW_LIB% -libpath:%ASSIMP_LIB% glew32.lib glfw3dll.lib opengl32.lib assimp-vc140-mt.lib
 
 if not exist bin (
     mkdir bin

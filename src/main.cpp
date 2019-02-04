@@ -13,18 +13,19 @@
 #include <fstream>
 #include <sstream>
 #include <iostream>
+#include <vector>
 
 #define arrayCount(x) ((sizeof(x) / sizeof(0 [x])) / ((size_t)(!(sizeof(x) % sizeof(0 [x])))))
 
-typedef unsigned int uint;
-
+#include "types.h"
 #include "shader.cpp"
+#include "mesh.cpp"
 
 static const uint SCREEN_WIDTH = 640;
 static const uint SCREEN_HEIGHT = 480;
 
 int main() {
-    if (!glfwInit()){
+    if (!glfwInit()) {
         fprintf(stderr, "ERROR: could not start GLFW3\n");
         return 1;
     }
@@ -35,7 +36,7 @@ int main() {
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
     GLFWwindow* window = glfwCreateWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "opengl_foobar", NULL, NULL);
-    if (!window){
+    if (!window) {
         fprintf(stderr, "ERROR: could not open window with GLFW3\n");
         glfwTerminate();
         return 1;
@@ -149,10 +150,10 @@ int main() {
     stbi_set_flip_vertically_on_load(true); // tell stb_image.h to flip loaded texture's on the y-axis.
     unsigned char *data;
     data = stbi_load("data/textures/container.jpg", &width, &height, &nrChannels, 0);
-    if (data){
+    if (data) {
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
         glGenerateMipmap(GL_TEXTURE_2D);
-    }else{
+    } else {
         std::cout << "Failed to load texture" << std::endl;
     }
     stbi_image_free(data);
@@ -168,10 +169,10 @@ int main() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     data = stbi_load("data/textures/awesomeface.png", &width, &height, &nrChannels, 0);
-    if (data){
+    if (data) {
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
         glGenerateMipmap(GL_TEXTURE_2D);
-    }else{
+    } else {
         std::cout << "Failed to load texture" << std::endl;
     }
     stbi_image_free(data);
@@ -182,7 +183,7 @@ int main() {
     shader.setInt("texture2", 1);
 
     bool running = true;
-    while(!glfwWindowShouldClose(window)) {
+    while (!glfwWindowShouldClose(window)) {
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
             glfwSetWindowShouldClose(window, true);
         }
@@ -203,7 +204,7 @@ int main() {
         shader.setMat4("view", view);
 
         glBindVertexArray(VAO);
-        for (int i = 0; i < arrayCount(cubePositions); i++){
+        for (int i = 0; i < arrayCount(cubePositions); i++) {
             glm::mat4 model = glm::mat4(1.0f);
             model = glm::translate(model, cubePositions[i]);
             float angle = 20.0f * i + glfwGetTime() * i;
