@@ -174,7 +174,7 @@ processMesh(Model* model, aiMesh *mesh, const aiScene *scene) {
     std::vector<Texture> textures;
 
     for(int i = 0; i < mesh->mNumVertices; i++) {
-        Vertex vertex;
+        Vertex vertex = {};
         glm::vec3 vector;
 
         vector.x = mesh->mVertices[i].x;
@@ -192,19 +192,21 @@ processMesh(Model* model, aiMesh *mesh, const aiScene *scene) {
             vec.x = mesh->mTextureCoords[0][i].x;
             vec.y = mesh->mTextureCoords[0][i].y;
             vertex.TexCoords = vec;
-        } else {
-            vertex.TexCoords = glm::vec2(0.0f, 0.0f);
         }
 
-        vector.x = mesh->mTangents[i].x;
-        vector.y = mesh->mTangents[i].y;
-        vector.z = mesh->mTangents[i].z;
-        vertex.Tangent = vector;
+        if(mesh->mTangents) {
+            vector.x = mesh->mTangents[i].x;
+            vector.y = mesh->mTangents[i].y;
+            vector.z = mesh->mTangents[i].z;
+            vertex.Tangent = vector;
+        }
 
-        vector.x = mesh->mBitangents[i].x;
-        vector.y = mesh->mBitangents[i].y;
-        vector.z = mesh->mBitangents[i].z;
-        vertex.Bitangent = vector;
+        if(mesh->mBitangents) {
+            vector.x = mesh->mBitangents[i].x;
+            vector.y = mesh->mBitangents[i].y;
+            vector.z = mesh->mBitangents[i].z;
+            vertex.Bitangent = vector;
+        }
         vertices.push_back(vertex);
     }
 

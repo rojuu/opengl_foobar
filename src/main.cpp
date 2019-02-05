@@ -64,7 +64,10 @@ int main() {
     };
 
     Shader shader = compileShader("basic.vs", "basic.fs");
+
+    printf("START model loading\n");
     Model model = loadModel("data/LowpolyForestPack/Trees/OakTree1.fbx");
+    printf("END model loading\n");
 
     bool running = true;
     while (!glfwWindowShouldClose(window)) {
