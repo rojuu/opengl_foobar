@@ -81,13 +81,14 @@ int main() {
         use(shader);
 
         glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT, 0.1f, 100.0f);
-        glm::mat4 view       = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -3.0f));
+        glm::mat4 view       = glm::lookAt(glm::vec3(0,0,-10), glm::vec3(0), glm::vec3(0,1,0));
         setMat4(shader, "projection", projection);
         setMat4(shader, "view", view);
 
         glm::mat4 modelMat = glm::mat4(1.0f);
-        modelMat = glm::translate(modelMat, glm::vec3(0.0f, -1.75f, 0.0f));
-        modelMat = glm::scale(modelMat, glm::vec3(0.2f, 0.2f, 0.2f));
+        modelMat = glm::translate(modelMat, glm::vec3(0.0f, -2.f, 0.0f));
+        modelMat = glm::scale(modelMat, glm::vec3(0.3f, 0.3f, 0.3f));
+        modelMat = glm::rotate(modelMat, -90.0f, glm::vec3(1,0,0));
         setMat4(shader, "model", modelMat);
         drawModel(&model, shader);
 
