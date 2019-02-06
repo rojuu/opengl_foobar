@@ -33,5 +33,6 @@ if not exist glfw3.dll (
 if not exist assimp.dll (
     robocopy %ASSIMP_BIN% . *.dll
 )
-cl %CommonCompilerFlags% ..\src\main.cpp -link -subsystem:console %CommonLinkerFlags% -out:opengl_foobar.exe
+set IMGUI_CPP=..\src\imgui\imgui.cpp ..\src\imgui\imgui_draw.cpp ..\src\imgui\imgui_widgets.cpp ..\src\imgui\imgui_impl_glfw.cpp ..\src\imgui\imgui_impl_opengl3.cpp
+cl %CommonCompilerFlags% ..\src\main.cpp %IMGUI_CPP% -link -subsystem:console %CommonLinkerFlags% -out:opengl_foobar.exe
 popd
