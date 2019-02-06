@@ -57,17 +57,8 @@ int main() {
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
 
-    float points[] = {
-        0.0f,  0.5f,  0.0f,
-        0.5f, -0.5f,  0.0f,
-        -0.5f, -0.5f,  0.0f
-    };
-
     Shader shader = compileShader("basic.vs", "basic.fs");
-
-    printf("START model loading\n");
-    Model model = loadModel("data/LowpolyForestPack/Trees/OakTree1.fbx");
-    printf("END model loading\n");
+    Model model = loadModel("data/nanosuit/nanosuit.obj");
 
     bool running = true;
     while (!glfwWindowShouldClose(window)) {
@@ -88,7 +79,7 @@ int main() {
         glm::mat4 modelMat = glm::mat4(1.0f);
         modelMat = glm::translate(modelMat, glm::vec3(0.0f, -2.f, 0.0f));
         modelMat = glm::scale(modelMat, glm::vec3(0.3f, 0.3f, 0.3f));
-        modelMat = glm::rotate(modelMat, -90.0f, glm::vec3(1,0,0));
+        modelMat = glm::rotate(modelMat, fmod((float)glfwGetTime() * 5.f, 360.f), glm::vec3(0,1,0));
         setMat4(shader, "model", modelMat);
         drawModel(&model, shader);
 
