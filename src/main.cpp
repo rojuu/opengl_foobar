@@ -30,8 +30,26 @@ typedef unsigned int uint;
 #include "shader.cpp"
 #include "model_loading.cpp"
 
-static const uint SCREEN_WIDTH = 1280;
-static const uint SCREEN_HEIGHT = 720;
+
+struct RenderContext {
+    GLFWwindow* window;
+    uint width;
+    uint height;
+};
+
+static RenderContext g_renderContext;
+
+static inline void
+resizeView(RenderContext* renderContext, uint width, uint height) {
+    renderContext->width = width;
+    renderContext->height = height;
+    glViewport(0, 0, width, height);
+}
+
+static void
+windowSizeCallback(GLFWwindow* window, int width, int height) {
+    resizeView(&g_renderContext, (uint)width, (uint)height);
+}
 
 int main() {
     if (!glfwInit()) {
@@ -44,13 +62,20 @@ int main() {
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    GLFWwindow* window = glfwCreateWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "opengl_foobar", NULL, NULL);
+    g_renderContext.width = 1280;
+    g_renderContext.height = 720;
+
+    GLFWwindow* window = glfwCreateWindow(g_renderContext.width, g_renderContext.height, "opengl_foobar", NULL, NULL);
     if (!window) {
         fprintf(stderr, "ERROR: could not open window with GLFW3\n");
         glfwTerminate();
         return 1;
     }
     glfwMakeContextCurrent(window);
+
+    g_renderContext.window = window;
+
+    glfwSetWindowSizeCallback(window, windowSizeCallback);
 
     glewExperimental = GL_TRUE;
     glewInit();
@@ -113,7 +138,7 @@ int main() {
 
         use(shader);
 
-        glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT, 0.1f, 100.0f);
+        glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)g_renderContext.width / (float)g_renderContext.height, 0.1f, 100.0f);
         glm::mat4 view       = glm::lookAt(glm::vec3(0,0,-10), glm::vec3(0), glm::vec3(0,1,0));
         setMat4(shader, "projection", projection);
         setMat4(shader, "view", view);
