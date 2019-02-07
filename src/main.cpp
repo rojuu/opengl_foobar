@@ -224,6 +224,7 @@ int main() {
         ImGui::NewFrame();
 
         bool entityEditorOpen = ImGui::Begin("Entity editor");
+        if(entities.size() > 0)
         {
             ImGui::InputInt("enity id", &selectedEntity);
             if(selectedEntity < 0) selectedEntity = 0;
@@ -257,7 +258,7 @@ int main() {
             drawEntity(entity);
         }
 
-        if(entityEditorOpen) {
+        if(entityEditorOpen && entities.size() > 0) {
             glDisable(GL_DEPTH_TEST);
             greenIndicator.position = entities[selectedEntity].position;
             drawEntity(&greenIndicator);
