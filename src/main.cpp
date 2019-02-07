@@ -9,6 +9,9 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/euler_angles.hpp>
+
 #include "imgui/imgui.h"
 #include "imgui/imgui_impl_glfw.h"
 #include "imgui/imgui_impl_opengl3.h"
@@ -29,7 +32,7 @@ typedef unsigned int uint;
 
 #include "shader.cpp"
 #include "model_loading.cpp"
-
+#include "camera.cpp"
 
 struct RenderContext {
     GLFWwindow* window;
@@ -50,6 +53,54 @@ static void
 windowSizeCallback(GLFWwindow* window, int width, int height) {
     resizeView(&g_renderContext, (uint)width, (uint)height);
 }
+
+static float lastX;
+static float lastY;
+static bool firstMouse = true;
+
+static Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
+
+static bool cameraMousePressed = false;
+
+static void
+mouseCallback(GLFWwindow* window, double xpos, double ypos) {
+    if (firstMouse) {
+        lastX = xpos;
+        lastY = ypos;
+        firstMouse = false;
+    }
+
+    float xoffset = xpos - lastX;
+    float yoffset = lastY - ypos; // reversed since y-coordinates go from bottom to top
+
+    lastX = xpos;
+    lastY = ypos;
+
+    if(!cameraMousePressed) return;
+    camera.processMouseMovement(xoffset, yoffset);
+}
+
+static void
+mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
+    if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS)
+        cameraMousePressed = true;
+    if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_RELEASE)
+        cameraMousePressed = false;
+}
+
+static void
+scrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
+    camera.processMouseScroll(yoffset);
+}
+
+struct Entity {
+    glm::vec3 position;
+    glm::vec3 rotation;
+    float scale;
+
+    Model* model;
+    Shader shader;
+};
 
 int main() {
     if (!glfwInit()) {
@@ -77,6 +128,10 @@ int main() {
 
     glfwSetWindowSizeCallback(window, windowSizeCallback);
 
+    glfwSetCursorPosCallback(window, mouseCallback);
+    glfwSetMouseButtonCallback(window, mouseButtonCallback);
+    glfwSetScrollCallback(window, scrollCallback);
+
     glewExperimental = GL_TRUE;
     glewInit();
 
@@ -103,52 +158,97 @@ int main() {
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 330 core");
 
-    Shader shader = compileShader("basic.vs", "basic.fs");
-    Model model = loadModel("data/nanosuit/nanosuit.obj");
+    Shader basicShader = compileShader("basic.vs", "basic.fs");
+    Model nanosuitModel = loadModel("data/nanosuit/nanosuit.obj");
+
+    std::vector<Entity> entities;
+    {
+        Entity entity = {};
+        entity.scale = 0.3f;
+        entity.model = &nanosuitModel;
+        entity.shader = basicShader;
+        entities.push_back(entity);
+    }
 
     glm::vec3 clearColor = glm::vec3(0.2f, 0.3f, 0.3f);
-    float spinRate = 5.f;
-    glm::vec3 position = glm::vec3(0.0f, -2.f, 0.0f);
-    float scale = 0.3f;
+
+    float deltaTime = 0.f;
+    float lastFrame = glfwGetTime();
 
     bool running = true;
     while (!glfwWindowShouldClose(window)) {
+        float currentFrame = glfwGetTime();
+        deltaTime = currentFrame - lastFrame;
+        lastFrame = currentFrame;
+
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
             glfwSetWindowShouldClose(window, true);
         }
+
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+            camera.processKeyboard(FORWARD, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+            camera.processKeyboard(BACKWARD, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+            camera.processKeyboard(LEFT, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+            camera.processKeyboard(RIGHT, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
+            camera.processKeyboard(UP, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+            camera.processKeyboard(DOWN, deltaTime);
 
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        {
-            ImGui::Begin("Hello, world!");
+        ImGui::Begin("Entities");
+        for(int i = 0; i < entities.size(); i++) {
+            std::string id = "Entity_" + i;
+            ImGui::PushID(id.c_str());
 
-            ImGui::SliderFloat("spin rate", &spinRate, -5.f, 5.0f);
-            ImGui::ColorEdit3("clear color", (float*)&clearColor);
-            ImGui::DragFloat3("position", (float*)&position, 0.1f);
-            ImGui::SliderFloat("scale", &scale, 0, 10);
+            auto* entity = &entities[i];
+            ImGui::Text("Entity: %i", i);
 
-            ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-            ImGui::End();
+            ImGui::DragFloat3("position", (float*)&entity->position, 0.1f);
+            ImGui::DragFloat3("rotation", (float*)&entity->rotation, 0.1f);
+            ImGui::DragFloat("scale", &entity->scale, 0.01f);
+
+            ImGui::Spacing();
+
+            ImGui::PopID();
         }
+        ImGui::Separator();
+        if(ImGui::Button("Add entity")) {
+            Entity entity = {};
+            entity.scale = 0.3f;
+            entity.model = &nanosuitModel;
+            entity.shader = basicShader;
+            entities.push_back(entity);
+        }
+        ImGui::End();
 
         glClearColor(clearColor.r, clearColor.g, clearColor.b, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // also clear the depth buffer now!
 
-        use(shader);
+        glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)g_renderContext.width / (float)g_renderContext.height, 0.1f, 100.0f);
+        glm::mat4 view = camera.getViewMatrix();
 
-        glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)g_renderContext.width / (float)g_renderContext.height, 0.1f, 100.0f);
-        glm::mat4 view       = glm::lookAt(glm::vec3(0,0,-10), glm::vec3(0), glm::vec3(0,1,0));
-        setMat4(shader, "projection", projection);
-        setMat4(shader, "view", view);
+        for(int i = 0; i < entities.size(); i++) {
+            auto* entity = &entities[i];
+            use(entity->shader);
+            setMat4(entity->shader, "projection", projection);
+            setMat4(entity->shader, "view", view);
 
-        glm::mat4 modelMat = glm::mat4(1.0f);
-        modelMat = glm::translate(modelMat, position);
-        modelMat = glm::scale(modelMat, glm::vec3(scale, scale, scale));
-        modelMat = glm::rotate(modelMat, fmod((float)glfwGetTime() * spinRate, 360.f), glm::vec3(0,1,0));
-        setMat4(shader, "model", modelMat);
-        drawModel(&model, shader);
+            glm::mat4 modelMat = glm::mat4(1.0f);
+            modelMat = glm::translate(modelMat, entity->position);
+            modelMat = glm::scale(modelMat, glm::vec3(entity->scale, entity->scale, entity->scale));
+            modelMat = modelMat * glm::yawPitchRoll(entity->rotation.x, entity->rotation.y, entity->rotation.z);
+
+            setMat4(entity->shader, "model", modelMat);
+
+            drawModel(entity->model, entity->shader);
+        }
 
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
