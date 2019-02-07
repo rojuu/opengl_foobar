@@ -13,7 +13,7 @@ static const float YAW         = -90.0f;
 static const float PITCH       =  0.0f;
 static const float SPEED       =  10.f;
 static const float SENSITIVITY =  0.1f;
-static const float ZOOM        =  45.0f;
+static const float FOV        =  45.0f;
 
 
 class Camera {
@@ -29,9 +29,9 @@ public:
 
     float MovementSpeed;
     float MouseSensitivity;
-    float Zoom;
+    float Fov;
 
-    Camera(glm::vec3 position = glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f), float yaw = YAW, float pitch = PITCH) : Front(glm::vec3(0.0f, 0.0f, -1.0f)), MovementSpeed(SPEED), MouseSensitivity(SENSITIVITY), Zoom(ZOOM)
+    Camera(glm::vec3 position = glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f), float yaw = YAW, float pitch = PITCH) : Front(glm::vec3(0.0f, 0.0f, -1.0f)), MovementSpeed(SPEED), MouseSensitivity(SENSITIVITY), Fov(FOV)
     {
         Position = position;
         WorldUp = up;
@@ -40,7 +40,7 @@ public:
         updateCameraVectors();
     }
 
-    Camera(float posX, float posY, float posZ, float upX, float upY, float upZ, float yaw, float pitch) : Front(glm::vec3(0.0f, 0.0f, -1.0f)), MovementSpeed(SPEED), MouseSensitivity(SENSITIVITY), Zoom(ZOOM)
+    Camera(float posX, float posY, float posZ, float upX, float upY, float upZ, float yaw, float pitch) : Front(glm::vec3(0.0f, 0.0f, -1.0f)), MovementSpeed(SPEED), MouseSensitivity(SENSITIVITY), Fov(FOV)
     {
         Position = glm::vec3(posX, posY, posZ);
         WorldUp = glm::vec3(upX, upY, upZ);
@@ -49,6 +49,12 @@ public:
         updateCameraVectors();
     }
 
+    const float NearPlane = 0.1f;
+    const float FarPlane = 100.0f;
+    glm::mat4 getProjectionMatrix()
+    {
+        return glm::perspective(glm::radians(Fov), (float)g_renderContext.width / (float)g_renderContext.height, NearPlane, FarPlane);
+    }
     glm::mat4 getViewMatrix()
     {
         return glm::lookAt(Position, Position + Front, Up);
@@ -99,12 +105,14 @@ public:
     // Processes input received from a mouse scroll-wheel event. Only requires input on the vertical wheel-axis
     void processMouseScroll(float yoffset)
     {
-        if (Zoom >= 1.0f && Zoom <= 45.0f)
-            Zoom -= yoffset;
-        if (Zoom <= 1.0f)
-            Zoom = 1.0f;
-        if (Zoom >= 45.0f)
-            Zoom = 45.0f;
+        Fov -= yoffset;
+
+        const float maxFov = 180.0f;
+        const float minFov = 1.0f;
+        if (Fov < minFov)
+            Fov = minFov;
+        if (Fov > maxFov)
+            Fov = maxFov;
     }
 
 private:

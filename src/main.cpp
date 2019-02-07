@@ -25,6 +25,7 @@
 #include <iostream>
 #include <vector>
 #include <map>
+#include <algorithm>
 
 #define arrayCount(x) ((sizeof(x) / sizeof(0 [x])) / ((size_t)(!(sizeof(x) % sizeof(0 [x])))))
 
@@ -32,7 +33,6 @@ typedef unsigned int uint;
 
 #include "shader.cpp"
 #include "model_loading.cpp"
-#include "camera.cpp"
 
 struct RenderContext {
     GLFWwindow* window;
@@ -41,6 +41,17 @@ struct RenderContext {
 };
 
 static RenderContext g_renderContext;
+
+#include "camera.cpp"
+
+struct Entity {
+    glm::vec3 position;
+    glm::vec3 rotation;
+    float scale;
+
+    Model* model;
+    Shader shader;
+};
 
 static inline void
 resizeView(RenderContext* renderContext, uint width, uint height) {
@@ -54,8 +65,8 @@ windowSizeCallback(GLFWwindow* window, int width, int height) {
     resizeView(&g_renderContext, (uint)width, (uint)height);
 }
 
-static float lastX;
-static float lastY;
+static float lastMouseX;
+static float lastMouseY;
 static bool firstMouse = true;
 
 static Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
@@ -65,16 +76,16 @@ static bool cameraMousePressed = false;
 static void
 mouseCallback(GLFWwindow* window, double xpos, double ypos) {
     if (firstMouse) {
-        lastX = xpos;
-        lastY = ypos;
+        lastMouseX = xpos;
+        lastMouseY = ypos;
         firstMouse = false;
     }
 
-    float xoffset = xpos - lastX;
-    float yoffset = lastY - ypos; // reversed since y-coordinates go from bottom to top
+    float xoffset = xpos - lastMouseX;
+    float yoffset = lastMouseY - ypos; // reversed since y-coordinates go from bottom to top
 
-    lastX = xpos;
-    lastY = ypos;
+    lastMouseX = xpos;
+    lastMouseY = ypos;
 
     if(!cameraMousePressed) return;
     camera.processMouseMovement(xoffset, yoffset);
@@ -93,14 +104,21 @@ scrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
     camera.processMouseScroll(yoffset);
 }
 
-struct Entity {
-    glm::vec3 position;
-    glm::vec3 rotation;
-    float scale;
+static void
+drawEntity(Entity* entity) {
+    use(entity->shader);
+    setMat4(entity->shader, "projection", camera.getProjectionMatrix());
+    setMat4(entity->shader, "view", camera.getViewMatrix());
 
-    Model* model;
-    Shader shader;
-};
+    glm::mat4 modelMat = glm::mat4(1.0f);
+    modelMat = glm::translate(modelMat, entity->position);
+    modelMat = glm::scale(modelMat, glm::vec3(entity->scale, entity->scale, entity->scale));
+    modelMat = modelMat * glm::yawPitchRoll(entity->rotation.x, entity->rotation.y, entity->rotation.z);
+
+    setMat4(entity->shader, "model", modelMat);
+
+    drawModel(entity->model, entity->shader);
+}
 
 int main() {
     if (!glfwInit()) {
@@ -159,7 +177,10 @@ int main() {
     ImGui_ImplOpenGL3_Init("#version 330 core");
 
     Shader basicShader = compileShader("basic.vs", "basic.fs");
+    Shader greenShader = compileShader("basic.vs", "green.fs");
+
     Model nanosuitModel = loadModel("data/nanosuit/nanosuit.obj");
+    Model sphereModel = loadModel("data/sphere/sphere.obj");
 
     std::vector<Entity> entities;
     {
@@ -170,10 +191,17 @@ int main() {
         entities.push_back(entity);
     }
 
+    Entity greenIndicator;
+    greenIndicator.scale = 0.1f;
+    greenIndicator.model = &sphereModel;
+    greenIndicator.shader = greenShader;
+
     glm::vec3 clearColor = glm::vec3(0.2f, 0.3f, 0.3f);
 
     float deltaTime = 0.f;
     float lastFrame = glfwGetTime();
+
+    int selectedEntity = 0;
 
     bool running = true;
     while (!glfwWindowShouldClose(window)) {
@@ -202,24 +230,21 @@ int main() {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        ImGui::Begin("Entities");
-        for(int i = 0; i < entities.size(); i++) {
-            std::string id = "Entity_" + i;
-            ImGui::PushID(id.c_str());
+        bool entityEditorOpen = ImGui::Begin("Entity editor");
+        {
+            ImGui::InputInt("enity id", &selectedEntity);
+            if(selectedEntity < 0) selectedEntity = 0;
+            if(selectedEntity >= entities.size()) selectedEntity = entities.size() -1;
 
-            auto* entity = &entities[i];
-            ImGui::Text("Entity: %i", i);
+            auto* entity = &entities[selectedEntity];
+            ImGui::Text("Selected entity: %i", selectedEntity);
 
             ImGui::DragFloat3("position", (float*)&entity->position, 0.1f);
             ImGui::DragFloat3("rotation", (float*)&entity->rotation, 0.1f);
             ImGui::DragFloat("scale", &entity->scale, 0.01f);
-
-            ImGui::Spacing();
-
-            ImGui::PopID();
         }
         ImGui::Separator();
-        if(ImGui::Button("Add entity")) {
+        if(ImGui::Button("Add nanosuit")) {
             Entity entity = {};
             entity.scale = 0.3f;
             entity.model = &nanosuitModel;
@@ -231,23 +256,19 @@ int main() {
         glClearColor(clearColor.r, clearColor.g, clearColor.b, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // also clear the depth buffer now!
 
-        glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)g_renderContext.width / (float)g_renderContext.height, 0.1f, 100.0f);
+        glm::mat4 projection = camera.getProjectionMatrix();
         glm::mat4 view = camera.getViewMatrix();
 
         for(int i = 0; i < entities.size(); i++) {
             auto* entity = &entities[i];
-            use(entity->shader);
-            setMat4(entity->shader, "projection", projection);
-            setMat4(entity->shader, "view", view);
+            drawEntity(entity);
+        }
 
-            glm::mat4 modelMat = glm::mat4(1.0f);
-            modelMat = glm::translate(modelMat, entity->position);
-            modelMat = glm::scale(modelMat, glm::vec3(entity->scale, entity->scale, entity->scale));
-            modelMat = modelMat * glm::yawPitchRoll(entity->rotation.x, entity->rotation.y, entity->rotation.z);
-
-            setMat4(entity->shader, "model", modelMat);
-
-            drawModel(entity->model, entity->shader);
+        if(entityEditorOpen) {
+            glDisable(GL_DEPTH_TEST);
+            greenIndicator.position = entities[selectedEntity].position;
+            drawEntity(&greenIndicator);
+            glEnable(GL_DEPTH_TEST);
         }
 
         ImGui::Render();
