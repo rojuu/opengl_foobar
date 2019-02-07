@@ -183,13 +183,6 @@ int main() {
     Model sphereModel = loadModel("data/sphere/sphere.obj");
 
     std::vector<Entity> entities;
-    {
-        Entity entity = {};
-        entity.scale = 0.3f;
-        entity.model = &nanosuitModel;
-        entity.shader = basicShader;
-        entities.push_back(entity);
-    }
 
     Entity greenIndicator;
     greenIndicator.scale = 0.1f;
