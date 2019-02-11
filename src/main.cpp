@@ -18,6 +18,8 @@
 
 #include "imgui/imgui_demo.cpp"
 
+#include "ImGuizmo/ImGuizmo.h"
+
 //TODO: Maybe don't use stl as much. Just faster to setup for now.
 #include <string>
 #include <fstream>
@@ -47,7 +49,7 @@ static RenderContext g_renderContext;
 struct Entity {
     glm::vec3 position;
     glm::vec3 rotation;
-    float scale;
+    glm::vec3 scale;
 
     Model* model;
     Shader shader;
@@ -112,12 +114,45 @@ drawEntity(Entity* entity) {
 
     glm::mat4 modelMat = glm::mat4(1.0f);
     modelMat = glm::translate(modelMat, entity->position);
-    modelMat = glm::scale(modelMat, glm::vec3(entity->scale, entity->scale, entity->scale));
-    modelMat = modelMat * glm::yawPitchRoll(entity->rotation.x, entity->rotation.y, entity->rotation.z);
+    modelMat = glm::scale(modelMat, glm::vec3(entity->scale.x, entity->scale.y, entity->scale.z));
+    modelMat = modelMat * glm::yawPitchRoll(glm::radians(entity->rotation.y), glm::radians(entity->rotation.x), glm::radians(entity->rotation.z));
 
     setMat4(entity->shader, "model", modelMat);
 
     drawModel(entity->model, entity->shader);
+}
+
+static void
+editTransform(Camera* camera, glm::mat4& matrix) {
+    static ImGuizmo::OPERATION mCurrentGizmoOperation(ImGuizmo::TRANSLATE);
+    static ImGuizmo::MODE mCurrentGizmoMode(ImGuizmo::WORLD);
+    if (ImGui::RadioButton("Translate", mCurrentGizmoOperation == ImGuizmo::TRANSLATE))
+        mCurrentGizmoOperation = ImGuizmo::TRANSLATE;
+    ImGui::SameLine();
+    if (ImGui::RadioButton("Rotate", mCurrentGizmoOperation == ImGuizmo::ROTATE))
+        mCurrentGizmoOperation = ImGuizmo::ROTATE;
+    ImGui::SameLine();
+    if (ImGui::RadioButton("Scale", mCurrentGizmoOperation == ImGuizmo::SCALE))
+        mCurrentGizmoOperation = ImGuizmo::SCALE;
+    float matrixTranslation[3], matrixRotation[3], matrixScale[3];
+    ImGuizmo::DecomposeMatrixToComponents((float*)glm::value_ptr(matrix), matrixTranslation, matrixRotation, matrixScale);
+    ImGui::InputFloat3("Tr", matrixTranslation, 3);
+    ImGui::InputFloat3("Rt", matrixRotation, 0.1f);
+    ImGui::InputFloat3("Sc", matrixScale, 3);
+    ImGuizmo::RecomposeMatrixFromComponents(matrixTranslation, matrixRotation, matrixScale, (float*)glm::value_ptr(matrix));
+
+    /*if (mCurrentGizmoOperation != ImGuizmo::SCALE)
+    {
+        if (ImGui::RadioButton("Local", mCurrentGizmoMode == ImGuizmo::LOCAL))
+            mCurrentGizmoMode = ImGuizmo::LOCAL;
+        ImGui::SameLine();
+        if (ImGui::RadioButton("World", mCurrentGizmoMode == ImGuizmo::WORLD))
+            mCurrentGizmoMode = ImGuizmo::WORLD;
+    }*/
+    ImGui::SameLine();
+    ImGuiIO& io = ImGui::GetIO();
+    ImGuizmo::SetRect(0, 0, io.DisplaySize.x, io.DisplaySize.y);
+    ImGuizmo::Manipulate((float*)glm::value_ptr(camera->getViewMatrix()), (float*)glm::value_ptr(camera->getProjectionMatrix()), mCurrentGizmoOperation, mCurrentGizmoMode, (float*)glm::value_ptr(matrix));
 }
 
 int main() {
@@ -185,7 +220,7 @@ int main() {
     std::vector<Entity> entities;
 
     Entity greenIndicator;
-    greenIndicator.scale = 0.1f;
+    greenIndicator.scale = glm::vec3(0.1f);
     greenIndicator.model = &sphereModel;
     greenIndicator.shader = greenShader;
 
@@ -222,6 +257,7 @@ int main() {
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
+        ImGuizmo::BeginFrame();
 
         bool entityEditorOpen = ImGui::Begin("Entity editor");
         if(entities.size() > 0)
@@ -232,15 +268,15 @@ int main() {
 
             auto* entity = &entities[selectedEntity];
             ImGui::Text("Selected entity: %i", selectedEntity);
-
-            ImGui::DragFloat3("position", (float*)&entity->position, 0.1f);
-            ImGui::DragFloat3("rotation", (float*)&entity->rotation, 0.1f);
-            ImGui::DragFloat("scale", &entity->scale, 0.01f);
+            glm::mat4 matrix;
+            ImGuizmo::RecomposeMatrixFromComponents((float*)&entity->position, (float*)&entity->rotation, (float*)&entity->scale, (float*)glm::value_ptr(matrix));
+            editTransform(&camera, matrix);
+            ImGuizmo::DecomposeMatrixToComponents((float*)glm::value_ptr(matrix), (float*)&entity->position, (float*)&entity->rotation, (float*)&entity->scale);
         }
         ImGui::Separator();
         if(ImGui::Button("Add nanosuit")) {
             Entity entity = {};
-            entity.scale = 0.3f;
+            entity.scale = glm::vec3(0.3f);
             entity.model = &nanosuitModel;
             entity.shader = basicShader;
             entities.push_back(entity);
