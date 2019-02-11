@@ -55,6 +55,31 @@ struct Entity {
     Shader shader;
 };
 
+struct Sphere {
+    glm::vec3 c;
+    float r;
+};
+
+static int selectedEntity = 0;
+static std::vector<Entity> entities;
+
+static bool
+intersectRaySphere(glm::vec3 p, glm::vec3 d, Sphere sphere)
+{
+    glm::vec3 m = p - sphere.c;
+    float b = glm::dot(m, d);
+    float c = glm::dot(m, m) - sphere.r * sphere.r;
+
+    // Exit if r’s origin outside sphere (c > 0) and r pointing away from sphere (b > 0)
+    if (c > 0.0f && b > 0.0f) return false;
+    float discr = b*b - c;
+
+    // A negative discriminant corresponds to ray missing sphere
+    if (discr < 0.0f) return false;
+
+    return true;
+}
+
 static inline void
 resizeView(RenderContext* renderContext, uint width, uint height) {
     renderContext->width = width;
@@ -93,12 +118,60 @@ mouseCallback(GLFWwindow* window, double xpos, double ypos) {
     camera.processMouseMovement(xoffset, yoffset);
 }
 
+static float entityPickerSize = 0.1f;
+
+static glm::vec3 testIndicatorPos;
+
 static void
 mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
     if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS)
         cameraMousePressed = true;
     if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_RELEASE)
         cameraMousePressed = false;
+
+    // Shoot ray from mouse pos trough camera and see what we hit.
+    // If we hit an entity, select it.
+    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE) {
+        glm::vec4 pos = glm::vec4(lastMouseX, lastMouseY, 0.f, 0.f);
+
+        glm::mat4 matProjection = camera.getProjectionMatrix() * camera.getViewMatrix();
+        glm::mat4 matInverse = glm::inverse(matProjection);
+
+        pos.x=(2.0f*((float)pos.x/(float)g_renderContext.width))-1.0f,
+        pos.y=1.0f-(2.0f*((float)pos.y/(float)g_renderContext.height));
+        pos.z=-1;
+        pos.w=1.0;
+
+        pos = matInverse * pos;
+
+        pos.w = 1.0 / pos.w;
+        pos.x *= pos.w;
+        pos.y *= pos.w;
+        pos.z *= pos.w;
+
+        glm::vec3 rayDir = glm::normalize(glm::vec3(pos.x, pos.y, pos.z) - camera.Position);
+        glm::vec3 rayPos = camera.Position;
+
+        int entityIndex = -1;
+        float smallestDistance = INFINITY;
+        for(int i = 0; i < entities.size(); i++) {
+            auto* entity = &entities[i];
+            Sphere sphere;
+            sphere.c = entity->position;
+            sphere.r = entityPickerSize + entityPickerSize*0.1f;
+            bool result = intersectRaySphere(rayPos, rayDir, sphere);
+            if(result) {
+                float distance = glm::distance(camera.Position, entity->position);
+                if(distance < smallestDistance) {
+                    entityIndex = i;
+                }
+            }
+        }
+
+        if(entityIndex >= 0) {
+            selectedEntity = entityIndex;
+        }
+    }
 }
 
 static void
@@ -213,23 +286,25 @@ int main() {
 
     Shader basicShader = compileShader("basic.vs", "basic.fs");
     Shader greenShader = compileShader("basic.vs", "green.fs");
+    Shader redShader   = compileShader("basic.vs", "red.fs");
 
     Model nanosuitModel = loadModel("data/nanosuit/nanosuit.obj");
     Model sphereModel = loadModel("data/sphere/sphere.obj");
 
-    std::vector<Entity> entities;
-
     Entity greenIndicator;
-    greenIndicator.scale = glm::vec3(0.1f);
+    greenIndicator.scale = glm::vec3(entityPickerSize);
     greenIndicator.model = &sphereModel;
     greenIndicator.shader = greenShader;
+
+    Entity testIndicator;
+    testIndicator.scale = glm::vec3(0.05f);
+    testIndicator.model = &sphereModel;
+    testIndicator.shader = redShader;
 
     glm::vec3 clearColor = glm::vec3(0.2f, 0.3f, 0.3f);
 
     float deltaTime = 0.f;
     float lastFrame = glfwGetTime();
-
-    int selectedEntity = 0;
 
     bool running = true;
     while (!glfwWindowShouldClose(window)) {
@@ -260,9 +335,8 @@ int main() {
         ImGuizmo::BeginFrame();
 
         bool entityEditorOpen = ImGui::Begin("Entity editor");
-        if(entities.size() > 0)
+        if(entityEditorOpen && entities.size() > 0)
         {
-            ImGui::InputInt("enity id", &selectedEntity);
             if(selectedEntity < 0) selectedEntity = 0;
             if(selectedEntity >= entities.size()) selectedEntity = entities.size() -1;
 
@@ -294,12 +368,22 @@ int main() {
             drawEntity(entity);
         }
 
-        if(entityEditorOpen && entities.size() > 0) {
-            glDisable(GL_DEPTH_TEST);
-            greenIndicator.position = entities[selectedEntity].position;
-            drawEntity(&greenIndicator);
-            glEnable(GL_DEPTH_TEST);
+        if(entityEditorOpen) {
+            for(int i = 0; i < entities.size(); i++) {
+                auto* entity = &entities[i];
+                glDisable(GL_DEPTH_TEST);
+                greenIndicator.position = entity->position;
+                drawEntity(&greenIndicator);
+                glEnable(GL_DEPTH_TEST);
+            }
         }
+
+#if 0
+        testIndicator.position = testIndicatorPos;
+        glDisable(GL_DEPTH_TEST);
+        drawEntity(&testIndicator);
+        glEnable(GL_DEPTH_TEST);
+#endif
 
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
