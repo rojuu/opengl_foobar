@@ -9,9 +9,6 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtx/euler_angles.hpp>
-
 #include "imgui/imgui.h"
 #include "imgui/imgui_impl_glfw.h"
 #include "imgui/imgui_impl_opengl3.h"
@@ -47,9 +44,10 @@ static RenderContext g_renderContext;
 #include "camera.cpp"
 
 struct Entity {
-    glm::vec3 position;
-    glm::vec3 rotation;
-    glm::vec3 scale;
+    glm::mat4 modelMatrix;
+    // glm::vec3 position;
+    // glm::vec3 rotation;
+    // glm::vec3 scale;
 
     Model* model;
     Shader shader;
@@ -96,7 +94,7 @@ static float lastMouseX;
 static float lastMouseY;
 static bool firstMouse = true;
 
-static Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
+static Camera camera(glm::vec3(0.0f, 8.0f, 15.0f), -90.f, -25.f);
 
 static bool cameraMousePressed = false;
 
@@ -121,6 +119,29 @@ mouseCallback(GLFWwindow* window, double xpos, double ypos) {
 static float entityPickerSize = 0.1f;
 
 static glm::vec3 testIndicatorPos;
+
+static void
+setPos(glm::mat4* matrix, glm::vec3 pos) {
+    (*matrix)[3][0] = pos.x;
+    (*matrix)[3][1] = pos.y;
+    (*matrix)[3][2] = pos.z;
+}
+
+static glm::vec3
+getPos(glm::mat4& matrix) {
+    glm::vec3 pos = glm::vec3(matrix[3]);
+    return pos;
+}
+
+static glm::vec3
+getScale(glm::mat4 matrix) {
+    glm::vec3 scale = glm::vec3(
+        glm::length(glm::vec4(matrix[0])),
+        glm::length(glm::vec4(matrix[1])),
+        glm::length(glm::vec4(matrix[2]))
+    );
+    return scale;
+}
 
 static void
 mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
@@ -156,12 +177,13 @@ mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
         float smallestDistance = INFINITY;
         for(int i = 0; i < entities.size(); i++) {
             auto* entity = &entities[i];
+            glm::vec3 entityPos = getPos(entity->modelMatrix);
             Sphere sphere;
-            sphere.c = entity->position;
+            sphere.c = entityPos;
             sphere.r = entityPickerSize + entityPickerSize*0.1f;
             bool result = intersectRaySphere(rayPos, rayDir, sphere);
             if(result) {
-                float distance = glm::distance(camera.Position, entity->position);
+                float distance = glm::distance(camera.Position, entityPos);
                 if(distance < smallestDistance) {
                     entityIndex = i;
                 }
@@ -185,20 +207,30 @@ drawEntity(Entity* entity) {
     setMat4(entity->shader, "projection", camera.getProjectionMatrix());
     setMat4(entity->shader, "view", camera.getViewMatrix());
 
-    glm::mat4 modelMat = glm::mat4(1.0f);
-    modelMat = glm::translate(modelMat, entity->position);
-    modelMat = glm::scale(modelMat, glm::vec3(entity->scale.x, entity->scale.y, entity->scale.z));
-    modelMat = modelMat * glm::yawPitchRoll(glm::radians(entity->rotation.y), glm::radians(entity->rotation.x), glm::radians(entity->rotation.z));
+    // glm::mat4 modelMat = glm::mat4(1.0f);
+    // modelMat = glm::translate(modelMat, entity->position);
+    // modelMat = glm::scale(modelMat, glm::vec3(entity->scale.x, entity->scale.y, entity->scale.z));
+    // modelMat = glm::rotate(modelMat, glm::radians(entity->rotation.x), glm::vec3(1.f, 0.f, 0.f));
+    // modelMat = glm::rotate(modelMat, glm::radians(entity->rotation.y), glm::vec3(0.f, 1.f, 0.f));
+    // modelMat = glm::rotate(modelMat, glm::radians(entity->rotation.z), glm::vec3(0.f, 0.f, 1.f));
 
-    setMat4(entity->shader, "model", modelMat);
+    setMat4(entity->shader, "model", entity->modelMatrix);
 
     drawModel(entity->model, entity->shader);
 }
 
 static void
-editTransform(Camera* camera, glm::mat4& matrix) {
+editTransform(GLFWwindow* window, Camera* camera, glm::mat4& matrix) {
     static ImGuizmo::OPERATION mCurrentGizmoOperation(ImGuizmo::TRANSLATE);
     static ImGuizmo::MODE mCurrentGizmoMode(ImGuizmo::WORLD);
+
+    if (glfwGetKey(window, GLFW_KEY_1) == GLFW_PRESS)
+        mCurrentGizmoOperation = ImGuizmo::TRANSLATE;
+    if (glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS)
+        mCurrentGizmoOperation = ImGuizmo::ROTATE;
+    if (glfwGetKey(window, GLFW_KEY_3) == GLFW_PRESS)
+        mCurrentGizmoOperation = ImGuizmo::SCALE;
+
     if (ImGui::RadioButton("Translate", mCurrentGizmoOperation == ImGuizmo::TRANSLATE))
         mCurrentGizmoOperation = ImGuizmo::TRANSLATE;
     ImGui::SameLine();
@@ -210,7 +242,7 @@ editTransform(Camera* camera, glm::mat4& matrix) {
     float matrixTranslation[3], matrixRotation[3], matrixScale[3];
     ImGuizmo::DecomposeMatrixToComponents((float*)glm::value_ptr(matrix), matrixTranslation, matrixRotation, matrixScale);
     ImGui::InputFloat3("Tr", matrixTranslation, 3);
-    ImGui::InputFloat3("Rt", matrixRotation, 0.1f);
+    ImGui::InputFloat3("Rt", matrixRotation, 3);
     ImGui::InputFloat3("Sc", matrixScale, 3);
     ImGuizmo::RecomposeMatrixFromComponents(matrixTranslation, matrixRotation, matrixScale, (float*)glm::value_ptr(matrix));
 
@@ -292,20 +324,17 @@ int main() {
     Model sphereModel = loadModel("data/sphere/sphere.obj");
 
     Entity greenIndicator;
-    greenIndicator.scale = glm::vec3(entityPickerSize);
+    greenIndicator.modelMatrix = glm::scale(glm::mat4(1.0f), glm::vec3(entityPickerSize));
     greenIndicator.model = &sphereModel;
     greenIndicator.shader = greenShader;
-
-    Entity testIndicator;
-    testIndicator.scale = glm::vec3(0.05f);
-    testIndicator.model = &sphereModel;
-    testIndicator.shader = redShader;
 
     glm::vec3 clearColor = glm::vec3(0.2f, 0.3f, 0.3f);
 
     float deltaTime = 0.f;
     float lastFrame = glfwGetTime();
 
+    bool hideAllDebugMenusPressed = false;
+    bool hideAllDebugMenus = false;
     bool running = true;
     while (!glfwWindowShouldClose(window)) {
         float currentFrame = glfwGetTime();
@@ -329,33 +358,46 @@ int main() {
         if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
             camera.processKeyboard(DOWN, deltaTime);
 
+        if (glfwGetKey(window, GLFW_KEY_F1) == GLFW_PRESS && !hideAllDebugMenusPressed) {
+            hideAllDebugMenus = !hideAllDebugMenus;
+            hideAllDebugMenusPressed = true;
+        }
+        if (glfwGetKey(window, GLFW_KEY_F1) == GLFW_RELEASE)
+            hideAllDebugMenusPressed = false;
+
+
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
         ImGuizmo::BeginFrame();
 
-        bool entityEditorOpen = ImGui::Begin("Entity editor");
-        if(entityEditorOpen && entities.size() > 0)
+        bool entityEditorOpen;
+        if(!hideAllDebugMenus)
         {
-            if(selectedEntity < 0) selectedEntity = 0;
-            if(selectedEntity >= entities.size()) selectedEntity = entities.size() -1;
+            entityEditorOpen = ImGui::Begin("Entity editor");
+            if(entityEditorOpen && entities.size() > 0)
+            {
+                if(selectedEntity < 0) selectedEntity = 0;
+                if(selectedEntity >= entities.size()) selectedEntity = entities.size() -1;
 
-            auto* entity = &entities[selectedEntity];
-            ImGui::Text("Selected entity: %i", selectedEntity);
-            glm::mat4 matrix;
-            ImGuizmo::RecomposeMatrixFromComponents((float*)&entity->position, (float*)&entity->rotation, (float*)&entity->scale, (float*)glm::value_ptr(matrix));
-            editTransform(&camera, matrix);
-            ImGuizmo::DecomposeMatrixToComponents((float*)glm::value_ptr(matrix), (float*)&entity->position, (float*)&entity->rotation, (float*)&entity->scale);
+                auto* entity = &entities[selectedEntity];
+                ImGui::Text("Selected entity: %i", selectedEntity);
+                editTransform(window, &camera, entity->modelMatrix);
+            }
+            ImGui::End();
+
+            ImGui::Begin("Entity spawner");
+            if(ImGui::Button("Add nanosuit at camera")) {
+                Entity entity = {};
+                glm::mat4 mat = glm::scale(glm::mat4(1.0f), glm::vec3(0.3f));;
+                setPos(&mat, camera.Front * 10.f + camera.Position);
+                entity.modelMatrix = mat;
+                entity.model = &nanosuitModel;
+                entity.shader = basicShader;
+                entities.push_back(entity);
+            }
+            ImGui::End();
         }
-        ImGui::Separator();
-        if(ImGui::Button("Add nanosuit")) {
-            Entity entity = {};
-            entity.scale = glm::vec3(0.3f);
-            entity.model = &nanosuitModel;
-            entity.shader = basicShader;
-            entities.push_back(entity);
-        }
-        ImGui::End();
 
         glClearColor(clearColor.r, clearColor.g, clearColor.b, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // also clear the depth buffer now!
@@ -368,22 +410,15 @@ int main() {
             drawEntity(entity);
         }
 
-        if(entityEditorOpen) {
+        if(!hideAllDebugMenus && entityEditorOpen) {
             for(int i = 0; i < entities.size(); i++) {
                 auto* entity = &entities[i];
-                glDisable(GL_DEPTH_TEST);
-                greenIndicator.position = entity->position;
+                 glDisable(GL_DEPTH_TEST);
+                setPos(&greenIndicator.modelMatrix, getPos(entity->modelMatrix));
                 drawEntity(&greenIndicator);
                 glEnable(GL_DEPTH_TEST);
             }
         }
-
-#if 0
-        testIndicator.position = testIndicatorPos;
-        glDisable(GL_DEPTH_TEST);
-        drawEntity(&testIndicator);
-        glEnable(GL_DEPTH_TEST);
-#endif
 
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
