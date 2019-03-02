@@ -17,7 +17,7 @@ set ASSIMP_BIN=%LIBS_FOLDER%\Assimp\bin64
 
 set GLM_INC=%LIBS_FOLDER%\glm
 
-set CommonCompilerFlags=-Zi -Od -EHsc -nologo -FC -I%GLEW_INC% -I%GLFW_INC% -I%GLM_INC% -I%ASSIMP_INC% -std:c++14
+set CommonCompilerFlags=-Zi -Od -EHsc -nologo -FC -I%GLEW_INC% -I%GLFW_INC% -I%GLM_INC% -I%ASSIMP_INC%
 set CommonLinkerFlags=-debug -libpath:%GLEW_LIB% -libpath:%GLFW_LIB% -libpath:%ASSIMP_LIB% glew32.lib glfw3dll.lib opengl32.lib assimp.lib
 
 if not exist bin (
@@ -33,7 +33,5 @@ if not exist glfw3.dll (
 if not exist assimp.dll (
     robocopy %ASSIMP_BIN% . *.dll
 )
-set IMGUI_CPP=..\src\imgui\imgui.cpp ..\src\imgui\imgui_draw.cpp ..\src\imgui\imgui_widgets.cpp ..\src\imgui\imgui_impl_glfw.cpp ..\src\imgui\imgui_impl_opengl3.cpp
-set IMGUIZMO_CPP=..\src\ImGuizmo\ImGuizmo.cpp
-cl %CommonCompilerFlags% ..\src\main.cpp %IMGUI_CPP% %IMGUIZMO_CPP% -link -subsystem:console %CommonLinkerFlags% -out:opengl_foobar.exe
+cl %CommonCompilerFlags% ..\src\main.cpp -link -subsystem:console %CommonLinkerFlags% -out:opengl_foobar.exe
 popd

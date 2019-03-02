@@ -9,21 +9,22 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-#include "imgui/imgui.h"
-#include "imgui/imgui_impl_glfw.h"
-#include "imgui/imgui_impl_opengl3.h"
+#include "imgui/imgui.cpp"
+#include "imgui/imgui_impl_opengl3.cpp"
+#include "imgui/imgui_impl_glfw.cpp"
+#include "imgui/imgui_widgets.cpp"
+#include "imgui/imgui_draw.cpp"
 
-#include "imgui/imgui_demo.cpp"
-
-#include "ImGuizmo/ImGuizmo.h"
+#include "ImGuizmo/ImGuizmo.cpp"
 
 //TODO: Maybe don't use stl as much. Just faster to setup for now.
-#include <string>
+//TODO: Should make a temp stack allocator for all the temp allocs at least, like strings
+//TODO: Get rid of std::string entirely and have custom one
+#include <string> 
 #include <fstream>
 #include <sstream>
 #include <iostream>
 #include <vector>
-#include <map>
 #include <algorithm>
 
 #define arrayCount(x) ((sizeof(x) / sizeof(0 [x])) / ((size_t)(!(sizeof(x) % sizeof(0 [x])))))
@@ -40,6 +41,15 @@ struct RenderContext {
 };
 
 static RenderContext g_renderContext;
+
+enum Direction {
+    FORWARD,
+    BACKWARD,
+    LEFT,
+    RIGHT,
+    UP,
+    DOWN,
+};
 
 #include "camera.cpp"
 
@@ -62,8 +72,7 @@ static int selectedEntity = 0;
 static std::vector<Entity> entities;
 
 static bool
-intersectRaySphere(glm::vec3 p, glm::vec3 d, Sphere sphere)
-{
+intersectRaySphere(glm::vec3 p, glm::vec3 d, Sphere sphere) {
     glm::vec3 m = p - sphere.c;
     float b = glm::dot(m, d);
     float c = glm::dot(m, m) - sphere.r * sphere.r;
@@ -92,14 +101,15 @@ windowSizeCallback(GLFWwindow* window, int width, int height) {
 
 static float lastMouseX;
 static float lastMouseY;
-static bool firstMouse = true;
 
-static Camera camera(glm::vec3(0.0f, 8.0f, 15.0f), -90.f, -25.f);
+static Camera g_camera;
 
 static bool cameraMousePressed = false;
 
 static void
 mouseCallback(GLFWwindow* window, double xpos, double ypos) {
+    static bool firstMouse = true;
+
     if (firstMouse) {
         lastMouseX = xpos;
         lastMouseY = ypos;
@@ -113,7 +123,7 @@ mouseCallback(GLFWwindow* window, double xpos, double ypos) {
     lastMouseY = ypos;
 
     if(!cameraMousePressed) return;
-    camera.processMouseMovement(xoffset, yoffset);
+    processMouseMovement(&g_camera, xoffset, yoffset);
 }
 
 static float entityPickerSize = 0.1f;
@@ -143,6 +153,50 @@ getScale(glm::mat4 matrix) {
     return scale;
 }
 
+static int
+findEntityUnderScreenPos(float mouseX, float mouseY) {
+    // Raycast from screenpos and see if we hit an entity, return its index, if so
+
+    glm::vec4 pos = glm::vec4(mouseX, mouseY, 0.f, 0.f);
+
+    glm::mat4 matProjection = calculateProjectionMatrix(&g_camera) * calculateViewMatrix(&g_camera);
+    glm::mat4 matInverse = glm::inverse(matProjection);
+
+    pos.x=(2.0f*((float)pos.x/(float)g_renderContext.width))-1.0f,
+        pos.y=1.0f-(2.0f*((float)pos.y/(float)g_renderContext.height));
+    pos.z=-1;
+    pos.w=1.0;
+
+    pos = matInverse * pos;
+
+    pos.w = 1.0 / pos.w;
+    pos.x *= pos.w;
+    pos.y *= pos.w;
+    pos.z *= pos.w;
+
+    glm::vec3 rayDir = glm::normalize(glm::vec3(pos.x, pos.y, pos.z) - g_camera.position);
+    glm::vec3 rayPos = g_camera.position;
+
+    int entityIndex = -1;
+    float smallestDistance = INFINITY;
+    for(int i = 0; i < entities.size(); i++) {
+        auto* entity = &entities[i];
+        glm::vec3 entityPos = getPos(entity->modelMatrix);
+        Sphere sphere;
+        sphere.c = entityPos;
+        sphere.r = entityPickerSize + entityPickerSize*0.1f;
+        bool result = intersectRaySphere(rayPos, rayDir, sphere);
+        if(result) {
+            float distance = glm::distance(g_camera.position, entityPos);
+            if(distance < smallestDistance) {
+                entityIndex = i;
+            }
+        }
+    }
+
+    return entityIndex;
+}
+
 static void
 mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
     if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS)
@@ -150,46 +204,8 @@ mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
     if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_RELEASE)
         cameraMousePressed = false;
 
-    // Shoot ray from mouse pos trough camera and see what we hit.
-    // If we hit an entity, select it.
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE) {
-        glm::vec4 pos = glm::vec4(lastMouseX, lastMouseY, 0.f, 0.f);
-
-        glm::mat4 matProjection = camera.getProjectionMatrix() * camera.getViewMatrix();
-        glm::mat4 matInverse = glm::inverse(matProjection);
-
-        pos.x=(2.0f*((float)pos.x/(float)g_renderContext.width))-1.0f,
-        pos.y=1.0f-(2.0f*((float)pos.y/(float)g_renderContext.height));
-        pos.z=-1;
-        pos.w=1.0;
-
-        pos = matInverse * pos;
-
-        pos.w = 1.0 / pos.w;
-        pos.x *= pos.w;
-        pos.y *= pos.w;
-        pos.z *= pos.w;
-
-        glm::vec3 rayDir = glm::normalize(glm::vec3(pos.x, pos.y, pos.z) - camera.Position);
-        glm::vec3 rayPos = camera.Position;
-
-        int entityIndex = -1;
-        float smallestDistance = INFINITY;
-        for(int i = 0; i < entities.size(); i++) {
-            auto* entity = &entities[i];
-            glm::vec3 entityPos = getPos(entity->modelMatrix);
-            Sphere sphere;
-            sphere.c = entityPos;
-            sphere.r = entityPickerSize + entityPickerSize*0.1f;
-            bool result = intersectRaySphere(rayPos, rayDir, sphere);
-            if(result) {
-                float distance = glm::distance(camera.Position, entityPos);
-                if(distance < smallestDistance) {
-                    entityIndex = i;
-                }
-            }
-        }
-
+        int entityIndex = findEntityUnderScreenPos(lastMouseX, lastMouseY);
         if(entityIndex >= 0) {
             selectedEntity = entityIndex;
         }
@@ -198,14 +214,14 @@ mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
 
 static void
 scrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
-    camera.processMouseScroll(yoffset);
+    processMouseScroll(&g_camera, yoffset);
 }
 
 static void
 drawEntity(Entity* entity) {
     use(entity->shader);
-    setMat4(entity->shader, "projection", camera.getProjectionMatrix());
-    setMat4(entity->shader, "view", camera.getViewMatrix());
+    setMat4(entity->shader, "projection", calculateProjectionMatrix(&g_camera));
+    setMat4(entity->shader, "view", calculateViewMatrix(&g_camera));
 
     // glm::mat4 modelMat = glm::mat4(1.0f);
     // modelMat = glm::translate(modelMat, entity->position);
@@ -257,7 +273,7 @@ editTransform(GLFWwindow* window, Camera* camera, glm::mat4& matrix) {
     ImGui::SameLine();
     ImGuiIO& io = ImGui::GetIO();
     ImGuizmo::SetRect(0, 0, io.DisplaySize.x, io.DisplaySize.y);
-    ImGuizmo::Manipulate((float*)glm::value_ptr(camera->getViewMatrix()), (float*)glm::value_ptr(camera->getProjectionMatrix()), mCurrentGizmoOperation, mCurrentGizmoMode, (float*)glm::value_ptr(matrix));
+    ImGuizmo::Manipulate((float*)glm::value_ptr(calculateViewMatrix(camera)), (float*)glm::value_ptr(calculateProjectionMatrix(camera)), mCurrentGizmoOperation, mCurrentGizmoMode, (float*)glm::value_ptr(matrix));
 }
 
 int main() {
@@ -265,6 +281,8 @@ int main() {
         fprintf(stderr, "ERROR: could not start GLFW3\n");
         return 1;
     }
+
+    g_camera = constructCamera(0.0f, 8.0f, 15.0, 0, 1, 0, -90.f, -25.f);
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -301,18 +319,15 @@ int main() {
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
 
-    // Setup Dear ImGui context
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO(); (void)io;
-    //io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;  // Enable Keyboard Controls
-    //io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;   // Enable Gamepad Controls
+    //io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    //io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
 
-    // Setup Dear ImGui style
     ImGui::StyleColorsDark();
     //ImGui::StyleColorsClassic();
 
-    // Setup Platform/Renderer bindings
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 330 core");
 
@@ -346,17 +361,17 @@ int main() {
         }
 
         if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-            camera.processKeyboard(FORWARD, deltaTime);
+            processKeyboard(&g_camera, FORWARD, deltaTime);
         if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-            camera.processKeyboard(BACKWARD, deltaTime);
+            processKeyboard(&g_camera, BACKWARD, deltaTime);
         if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-            camera.processKeyboard(LEFT, deltaTime);
+            processKeyboard(&g_camera, LEFT, deltaTime);
         if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-            camera.processKeyboard(RIGHT, deltaTime);
+            processKeyboard(&g_camera, RIGHT, deltaTime);
         if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
-            camera.processKeyboard(UP, deltaTime);
+            processKeyboard(&g_camera, UP, deltaTime);
         if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
-            camera.processKeyboard(DOWN, deltaTime);
+            processKeyboard(&g_camera, DOWN, deltaTime);
 
         if (glfwGetKey(window, GLFW_KEY_F1) == GLFW_PRESS && !hideAllDebugMenusPressed) {
             hideAllDebugMenus = !hideAllDebugMenus;
@@ -382,7 +397,7 @@ int main() {
 
                 auto* entity = &entities[selectedEntity];
                 ImGui::Text("Selected entity: %i", selectedEntity);
-                editTransform(window, &camera, entity->modelMatrix);
+                editTransform(window, &g_camera, entity->modelMatrix);
             }
             ImGui::End();
 
@@ -390,7 +405,7 @@ int main() {
             if(ImGui::Button("Add nanosuit at camera")) {
                 Entity entity = {};
                 glm::mat4 mat = glm::scale(glm::mat4(1.0f), glm::vec3(0.3f));;
-                setPos(&mat, camera.Front * 10.f + camera.Position);
+                setPos(&mat, g_camera.front * 10.f + g_camera.position);
                 entity.modelMatrix = mat;
                 entity.model = &nanosuitModel;
                 entity.shader = basicShader;
@@ -400,10 +415,10 @@ int main() {
         }
 
         glClearColor(clearColor.r, clearColor.g, clearColor.b, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // also clear the depth buffer now!
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        glm::mat4 projection = camera.getProjectionMatrix();
-        glm::mat4 view = camera.getViewMatrix();
+        glm::mat4 projection = calculateProjectionMatrix(&g_camera);
+        glm::mat4 view = calculateViewMatrix(&g_camera);
 
         for(int i = 0; i < entities.size(); i++) {
             auto* entity = &entities[i];

@@ -1,4 +1,3 @@
-//TODO: Make a temp buffer for all these strings and don't use std::string, should make a generic temp stack allocator I guess
 struct Shader {
     uint ID;
 };
@@ -37,6 +36,8 @@ compileShader(std::string vertexPath, std::string fragmentPath, std::string geom
     vShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
     fShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
     gShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+
+    //TODO: Get rid of exceptions
     try {
         const std::string shaderFolder = "data/shaders/";
         vShaderFile.open(shaderFolder + vertexPath);
