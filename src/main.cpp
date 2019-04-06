@@ -55,10 +55,6 @@ enum Direction {
 
 struct Entity {
     glm::mat4 modelMatrix;
-    // glm::vec3 position;
-    // glm::vec3 rotation;
-    // glm::vec3 scale;
-
     Model* model;
     Shader shader;
 };
