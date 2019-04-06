@@ -20,7 +20,7 @@
 //TODO: Maybe don't use stl as much. Just faster to setup for now.
 //TODO: Should make a temp stack allocator for all the temp allocs at least, like strings
 //TODO: Get rid of std::string entirely and have custom one
-#include <string> 
+#include <string>
 #include <fstream>
 #include <sstream>
 #include <iostream>
