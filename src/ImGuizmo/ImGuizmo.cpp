@@ -27,6 +27,10 @@
 #include "../imgui/imgui_internal.h"
 #include "ImGuizmo.h"
 
+// windows.h probably included somewhere that is adding these and messing up the code...
+#undef min
+#undef max
+
 // includes patches for multiview from
 // https://github.com/CedricGuillemet/ImGuizmo/issues/15
 
